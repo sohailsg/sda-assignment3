@@ -1,0 +1,5 @@
+channel_id,channel_name,lead_group,type,hemisphere,anatomical_location,is_seizure_onset_zone,electrode_type,material,manufacturer,size_mm2,impedance_ohm,impedance_status,units,sampling_frequency_hz,reference_scheme,adc_resolution_bits,adc_min,adc_max,zero_digital,gain_uV_per_lsb,low_cutoff_hz,high_cutoff_hz,notch_hz,power_line_frequency_hz,device_model
+ch1,LT01-LT02,Lead-1,ECOG,L,left hippocampus,True,depth,platinum-iridium,NeuroPace,7.9,1180,normal,uV,250,bipolar,10,0,1023,512,3.8,4.0,90.0,50,50,RNS-320
+ch2,LT03-LT04,Lead-1,ECOG,L,left amygdala,False,depth,platinum-iridium,NeuroPace,7.9,1340,normal,uV,250,bipolar,10,0,1023,512,3.8,4.0,90.0,50,50,RNS-320
+ch3,RT01-RT02,Lead-2,ECOG,R,right hippocampus,False,depth,platinum-iridium,NeuroPace,7.9,1090,normal,uV,250,bipolar,10,0,1023,512,3.8,4.0,90.0,50,50,RNS-320
+ch4,RT03-RT04,Lead-2,ECOG,R,right amygdala,False,depth,platinum-iridium,NeuroPace,7.9,3610,abnormal,uV,250,bipolar,10,0,1023,512,3.8,4.0,90.0,50,50,RNS-320

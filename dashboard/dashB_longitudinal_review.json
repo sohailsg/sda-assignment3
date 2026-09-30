@@ -1,0 +1,126 @@
+{
+  "dashboard": {
+    "uid": "aqtsrt",
+    "title": "B. Longitudinal Clinical Review",
+    "tags": ["neuro-surge"],
+    "timezone": "browser",
+    "time": {"from": "now-8w", "to": "now"},
+    "templating": {
+      "list": [{
+        "name": "patient", "type": "query", "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "query": "SELECT DISTINCT patient_id FROM alert_episodes ORDER BY patient_id",
+        "multi": false
+      }]
+    },
+    "panels": [
+      {
+        "id": 6,
+        "title": "Seizures — Last 14 Days",
+        "description": "Headline count for the current period, so the % change beside it has context.",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 8, "x": 0, "y": 0},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "text"}}},
+        "targets": [{
+          "rawSql": "SELECT COUNT(*) AS value FROM alert_episodes WHERE family='SEIZURE' AND patient_id = '$patient' AND start_time > NOW() - INTERVAL 14 DAY",
+          "format": "table"
+        }]
+      },
+      {
+        "id": 7,
+        "title": "Weekly Trend",
+        "description": "Change in seizure count per week, fitted across every week of data (not just a two-point comparison, which is too noisy with this few episodes per week). Negative = improving, positive = worsening.",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 8, "x": 8, "y": 0},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {
+          "unit": "short", "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"steps": [
+            {"color": "green", "value": null}, {"color": "orange", "value": 0}, {"color": "red", "value": 0.5}
+          ]}
+        }},
+        "targets": [{
+          "rawSql": "SELECT (COUNT(*)*SUM(w*c) - SUM(w)*SUM(c)) / NULLIF(COUNT(*)*SUM(w*w) - POWER(SUM(w),2), 0) AS value FROM (SELECT FLOOR(DATEDIFF(start_time, (SELECT MIN(start_time) FROM alert_episodes WHERE family='SEIZURE' AND patient_id='$patient')) / 7) AS w, COUNT(*) AS c FROM alert_episodes WHERE family='SEIZURE' AND $__timeFilter(start_time) AND patient_id = '$patient' GROUP BY w) t",
+          "format": "table"
+        }]
+      },
+      {
+        "id": 4,
+        "title": "Treatment Response Rate",
+        "description": "Of the seizures severe enough to matter, what fraction actually got a therapy response from the implant?",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 8, "x": 16, "y": 0},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {
+          "unit": "percent", "min": 0, "max": 100,
+          "thresholds": {"steps": [
+            {"color": "red", "value": null}, {"color": "orange", "value": 60}, {"color": "green", "value": 90}
+          ]}
+        }},
+        "targets": [{
+          "rawSql": "SELECT 100.0 * SUM(CASE WHEN EXISTS (SELECT 1 FROM surge_evaluations s WHERE s.patient_id=e.patient_id AND s.epoch_id=e.epoch_id AND s.stim_active=1) THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0) AS value FROM alert_episodes e WHERE e.family='SEIZURE' AND e.severity='critical' AND $__timeFilter(e.start_time) AND e.patient_id = '$patient'",
+          "format": "table"
+        }]
+      },
+      {
+        "id": 1,
+        "title": "Seizures per Week — $patient",
+        "description": "Is this patient's seizure frequency going up, down, or flat over time? Red = confirmed seizure, orange = milder/brief event.",
+        "type": "timeseries",
+        "gridPos": {"h": 9, "w": 24, "x": 0, "y": 5},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {
+          "defaults": {"custom": {"drawStyle": "bars", "stacking": {"mode": "normal"}, "fillOpacity": 80, "lineWidth": 0}},
+          "overrides": [
+            {"matcher": {"id": "byName", "options": "critical"}, "properties": [{"id": "displayName", "value": "Seizure"}]},
+            {"matcher": {"id": "byName", "options": "warning"}, "properties": [{"id": "displayName", "value": "Mild / brief event"}]}
+          ]
+        },
+        "targets": [{
+          "rawSql": "SELECT $__timeGroupAlias(start_time, '7d'), severity AS metric, COUNT(*) AS value FROM alert_episodes WHERE family='SEIZURE' AND $__timeFilter(start_time) AND patient_id = '$patient' GROUP BY 1,2 ORDER BY 1",
+          "format": "time_series"
+        }]
+      },
+      {
+        "id": 2,
+        "title": "Average Seizure Length per Week — $patient",
+        "description": "Are seizures getting shorter (treatment working) or longer (treatment failing)?",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {"unit": "ms", "custom": {"drawStyle": "line", "fillOpacity": 15}}},
+        "targets": [{
+          "rawSql": "SELECT $__timeGroupAlias(start_time, '7d'), patient_id AS metric, AVG(duration_ms) AS value FROM alert_episodes WHERE family='SEIZURE' AND $__timeFilter(start_time) AND patient_id = '$patient' GROUP BY 1,2 ORDER BY 1",
+          "format": "time_series"
+        }]
+      },
+      {
+        "id": 3,
+        "title": "Average Seizure Intensity per Week — $patient",
+        "description": "Are seizures getting milder or more severe over time? (kept as its own chart rather than overlaid on length, since the two are different scales)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "fillOpacity": 15}}},
+        "targets": [{
+          "rawSql": "SELECT $__timeGroupAlias(start_time, '7d'), patient_id AS metric, AVG(peak_surge_index) AS value FROM alert_episodes WHERE family='SEIZURE' AND $__timeFilter(start_time) AND patient_id = '$patient' GROUP BY 1,2 ORDER BY 1",
+          "format": "time_series"
+        }]
+      },
+      {
+        "id": 5,
+        "title": "Where This Patient's Seizures Start — $patient",
+        "description": "Which part of the brain do this patient's seizures originate from — is it consistent or shifting?",
+        "type": "barchart",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "targets": [{
+          "rawSql": "SELECT c.anatomical_location AS onset, COUNT(*) AS n_episodes FROM alert_episodes e JOIN channels c ON c.channel_id = e.onset_channel WHERE e.family='SEIZURE' AND $__timeFilter(e.start_time) AND e.patient_id = '$patient' GROUP BY onset ORDER BY n_episodes DESC",
+          "format": "table"
+        }]
+      }
+    ]
+  },
+  "overwrite": true
+}

@@ -1,0 +1,124 @@
+{
+  "dashboard": {
+    "uid": "af7vhq",
+    "title": "A. Real-Time Clinical Dashboard",
+    "tags": ["neuro-surge"],
+    "timezone": "browser",
+    "time": {"from": "now-30d", "to": "now"},
+    "refresh": "10s",
+    "templating": {
+      "list": [
+        {
+          "name": "patient", "type": "query", "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+          "query": "SELECT DISTINCT patient_id FROM surge_evaluations ORDER BY patient_id",
+          "multi": true, "includeAll": true, "current": {"text": "All", "value": "$__all"}
+        },
+        {
+          "name": "focus_patient", "type": "query", "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+          "label": "Drill into",
+          "query": "SELECT DISTINCT patient_id FROM surge_evaluations ORDER BY patient_id",
+          "multi": false
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1, "title": "Active Seizures", "type": "stat",
+        "description": "Confirmed seizure events happening now or in the selected time range.",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [
+          {"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
+        "targets": [{"rawSql": "SELECT COUNT(*) AS value FROM alert_episodes WHERE severity='critical' AND $__timeFilter(start_time) AND patient_id IN ($patient)", "format": "table"}]
+      },
+      {
+        "id": 2, "title": "Possible / Mild Events", "type": "stat",
+        "description": "Events flagged but not severe enough to count as a confirmed seizure -- worth a look, not an emergency.",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [
+          {"color": "green", "value": null}, {"color": "orange", "value": 1}]}}},
+        "targets": [{"rawSql": "SELECT COUNT(*) AS value FROM alert_episodes WHERE severity='warning' AND $__timeFilter(start_time) AND patient_id IN ($patient)", "format": "table"}]
+      },
+      {
+        "id": 3, "title": "Patients Monitored", "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "text"}}},
+        "targets": [{"rawSql": "SELECT COUNT(DISTINCT patient_id) AS value FROM surge_evaluations WHERE patient_id IN ($patient)", "format": "table"}]
+      },
+      {
+        "id": 4, "title": "Device / Sensor Faults", "type": "stat",
+        "description": "Hardware readings outside the safe range -- a failing electrode or an over-limit stimulation setting, not a brain event.",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [
+          {"color": "green", "value": null}, {"color": "orange", "value": 1}]}}},
+        "targets": [{"rawSql": "SELECT COUNT(*) AS value FROM device_health WHERE severity != 'normal' AND $__timeFilter(event_time) AND patient_id IN ($patient)", "format": "table"}]
+      },
+      {
+        "id": 5,
+        "title": "Active Alerts",
+        "description": "One row per event (not per split-second reading). Spread tells you whether it stayed in one area of the brain (Focal) or looks like a whole-head movement artifact (Widespread).",
+        "type": "table",
+        "gridPos": {"h": 10, "w": 24, "x": 0, "y": 4},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {
+          "defaults": {"custom": {"align": "left"}},
+          "overrides": [
+            {"matcher": {"id": "byName", "options": "Severity"}, "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background"}},
+              {"id": "mappings", "value": [{"type": "value", "options": {
+                "critical": {"text": "Critical", "color": "red", "index": 0},
+                "warning": {"text": "Warning", "color": "orange", "index": 1}
+              }}]}
+            ]},
+            {"matcher": {"id": "byName", "options": "Treatment Fired"}, "properties": [
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"1": {"text": "Yes"}, "0": {"text": "No"}}}
+              ]}
+            ]},
+            {"matcher": {"id": "byName", "options": "Time"}, "properties": [
+              {"id": "custom.width", "value": 200}
+            ]}
+          ]
+        },
+        "targets": [{
+          "rawSql": "SELECT e.start_time AS 'Time', e.patient_id AS 'Patient', e.severity AS 'Severity', CASE e.alert_type WHEN 'SEIZURE_SURGE' THEN 'Seizure' WHEN 'SUBCLINICAL' THEN 'Mild / brief event' WHEN 'SIGNAL_QUALITY' THEN 'Bad sensor data' ELSE e.alert_type END AS 'What Happened', c.anatomical_location AS 'Brain Region', CASE WHEN (LENGTH(e.channels_involved) - LENGTH(REPLACE(e.channels_involved,',','')) + 1) <= 2 THEN 'Focal' ELSE 'Widespread' END AS 'Spread', ROUND(e.duration_ms) AS 'Duration (ms)', e.stim_delivered AS 'Treatment Fired' FROM alert_episodes e LEFT JOIN channels c ON c.channel_id = e.onset_channel WHERE $__timeFilter(e.start_time) AND e.patient_id IN ($patient) ORDER BY e.end_time DESC LIMIT 30",
+          "format": "table"
+        }]
+      },
+      {
+        "id": 6,
+        "title": "Seizure Intensity & Treatment Response — $focus_patient",
+        "description": "How intense the event looked to the detector, over time. Orange markers show when the implant's own stimulation therapy actually fired.",
+        "type": "timeseries",
+        "gridPos": {"h": 9, "w": 24, "x": 0, "y": 14},
+        "datasource": {"type": "mysql", "uid": "bfzbgr2xcenswd"},
+        "fieldConfig": {
+          "defaults": {"custom": {"drawStyle": "line", "spanNulls": true}},
+          "overrides": [
+            {"matcher": {"id": "byRegexp", "options": ".*treatment_fired$"}, "properties": [
+              {"id": "custom.drawStyle", "value": "points"},
+              {"id": "custom.pointSize", "value": 8},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]}
+          ]
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "rawSql": "SELECT $__timeGroupAlias(event_time, '1s'), 'intensity' AS metric, MAX(surge_index) AS value FROM surge_evaluations WHERE $__timeFilter(event_time) AND patient_id = '$focus_patient' GROUP BY 1,2 ORDER BY 1",
+            "format": "time_series"
+          },
+          {
+            "refId": "B",
+            "rawSql": "SELECT event_time AS time, 'treatment_fired' AS metric, surge_index AS value FROM surge_evaluations WHERE $__timeFilter(event_time) AND patient_id = '$focus_patient' AND stim_active = 1 ORDER BY event_time",
+            "format": "time_series"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}
